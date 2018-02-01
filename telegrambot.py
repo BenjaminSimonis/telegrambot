@@ -4,6 +4,7 @@
 #Version: 0.8 Beta
 
 import telegram, json, requests, os, subprocess, time
+from apikey import BOT_KEY, WEATHER_KEY
 from time import sleep 
 from urllib2 import URLError
 from random import randint
@@ -154,7 +155,7 @@ def Disk():
 
 def Weather(town):
 	w_api="http://api.openweathermap.org/data/2.5/forecast?q="
-	api_code="&appid=API_KEY_FROM_OPENWEATHERMAP"
+	api_code="&appid=" + WEATHER_KEY
 	country=",de"
 	unit="&units=metric&lang=de"
 	if len(town) > 2:
@@ -176,12 +177,11 @@ def FormatWeather(weatherText):
 
 #MAIN PROGRAM
 update_id = None
-InitFacts()
 
 #Telegram API Token. Get yours with BotFather!
 BotToken = 'TELEGRAM BOT API KEY'
 
-bot = telegram.Bot(BotToken)
+bot = telegram.Bot(BOT_KEY)
 print 'PI TELEGRAM BOT READY TO GO!'
 
 while True:
