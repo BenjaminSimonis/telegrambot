@@ -1,109 +1,160 @@
+# -*- coding: utf-8 -*-
 #Assistant Bot for Telegram
 #Author: Benjamin Simonis
-#Date: January/2018
-#Version: 0.8 Beta
-
-import telegram, json, requests, os, subprocess, time
-from apikey import BOT_KEY, WEATHER_KEY
-from time import sleep 
+#Date: February/2018
+#Version: 0.8.1 Beta
+import telegram
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
+import json, requests, os, subprocess, time
+from apikey import *
+from time import sleep
 from urllib2 import URLError
 from random import randint
 import subprocess
 
 #global variables
 PiFactsCollection = []
-#AuthList are Telegram IDs, which are allowed to talk with the Bot
-AuthList = [12345678,98754321]
+AuthList = [123456789,987654321]
+KeyboardDict = {}
 EditList = False
 ListFile = "/home/bot/TelegramBot/list.txt"
 AccessList = "/home/bot/TelegramBot/tried.txt"
 emojis = {
         "Rain":"\U0001F327",
+        "Drizzle":"\U0001F327",
         "Thunderstorm":"\U000026C8",
-        "Sun":"\U00002600",
+        "Clear":"\U00002600",
         "Clouds":"\U00002601",
-        "Cloudy":"\U000026C5",
         "Foggy":"\U0001F32B",
         "Snow":"\U0001F328",
-	"Temperatur":"\U0001F321",
-	"Wind":"\U0001F32C",
-	"Grad":"\U00002103"
+        "Temperatur":"\U0001F321",
+        "Wind":"\U0001F32C",
+        "Grad":"\U00002103"
 }
+
+def makeKeyboard(BotObj, ChatID):
+        if (ChatID in KeyboardDict):
+                if (KeyboardDict[ChatID] != "Standard"):
+                        custom_keyboard = [['Einkaufsliste', 'Wetterbericht'], ['Fun Facts', 'CCC FR'], ['Temperatur Pi', 'Speicher Pi']]
+                        reply_markup = telegram.ReplyKeyboardMarkup(custom_keyboard)
+                        BotObj.send_message(chat_id=ChatID, text="Was darf es denn sein?", reply_markup=reply_markup)
+        else:
+                KeyboardDict[ChatID]="Standard"
+        return
 
 #Function: manages PI Telegram bot
 #Params: bot object and update ID
 #Return: update ID
 def PIBot(bot, update_id):
-	for update in bot.getUpdates(offset=update_id, timeout=10):
-        	chat_id = update.message.chat_id
-        	update_id = update.update_id + 1
-        	message = update.message.text
-        	if message and (chat_id in AuthList):
-        		CheckAndAnswer(message, bot, chat_id)
-		else: 
-			bot.sendMessage(chat_id=chat_id, text="Please don't talk to me or ask my Admin first, if you want to talk with me!")
-			f = open(AccessList, 'a')
-                	f.write(str(chat_id) + " - " + time.strftime("%d.%m.%Y %H:%M:%S") + "\n")
-                	f.close
-	return update_id
+        for update in bot.getUpdates(offset=update_id, timeout=10):
+                if ("callback_query" in str(update)):
+                        chat_id = update.callback_query.message.chat.id
+                        message = update.callback_query.data
+                else:
+                        chat_id = update.message.chat_id
+                        message = update.message.text
+                update_id = update.update_id + 1
+                makeKeyboard(bot, chat_id)
+                if message and (chat_id in AuthList):
+                        if("callback_query" in str(update)):
+                                InlineAnswer(message, bot, chat_id)
+                        else:
+                                CheckAndAnswer(message, bot, chat_id)
+                else:
+                        bot.sendMessage(chat_id=chat_id, text="Please don't talk to me or ask my Admin first, if you want to talk with me!")
+                        f = open(AccessList, 'a')
+                        f.write(str(chat_id) + " - " + time.strftime("%d.%m.%Y %H:%M:%S") + "\n")
+                        f.close
+        return update_id
+
+
+
+def InlineAnswer(Msg,BotObj,ChatID):
+        if Msg == "/givelist":
+                f = open(ListFile, 'r')
+                listContent = f.read()
+                BotObj.sendMessage(chat_id=ChatID, text=listContent)
+                f.close()
+                return
+        elif Msg == "/additems":
+                global EditList
+                BotObj.sendMessage(chat_id=ChatID, text="Was möchtest du der Einkaufsliste hinzufügen? Bitte trenne die einzelnen Elemente mit einem Komma! Wenn du fertig bist, nutze /stop")
+                EditList = True
+                return
+        elif Msg == "/deleteall":
+                BotObj.sendMessage(chat_id=ChatID, text="Ok, Liste ist gelöscht.")
+                f = open(ListFile, 'w')
+                f.write("=== Einkaufsliste ===\n")
+                f.close()
+                return
+        else:
+                BotObj.sendMessage(chat_id=ChatID, text="Ungültig!")
+                return
+
 
 #Function: check message rec. and answer it (if it's needed)
 #Params: message, bot telegram object and Telegram chat ID
 #Return: none
 def CheckAndAnswer(Msg,BotObj,ChatID):
-	MsgLowerCase = Msg.lower()
-	global EditList
-	global ListFile
-	if (EditList == True):
-		EditTheList(MsgLowerCase, BotObj, ChatID)
-		return
-	elif (MsgLowerCase == "hi" or MsgLowerCase == "hallo" or MsgLowerCase == "hey"):
-		BotObj.sendMessage(chat_id=ChatID, text="Hallo, ich bin dein persönlicher Assistent und bin zu deinen Diensten. Siehe auch /help " )
-		return
-	elif ((MsgLowerCase == "/facts")):
-		RandomFact = ChuckNorrisJokes()
-		BotObj.sendMessage(chat_id=ChatID, text=RandomFact)
-		return
-	elif ((MsgLowerCase == "/help")):
-                BotObj.sendMessage(chat_id=ChatID, text="Es gibt zur Zeit folgende Commands:\nhi\n/facts\n/help\n/additems\n/stop\n/deleteall\n/givelist\nWeitere Commands wird es in Zukunft geben.")
+        MsgLowerCase = Msg.lower().encode('utf-8')
+        global EditList
+		global ListFile
+        if (EditList == True):
+                EditTheList(MsgLowerCase, BotObj, ChatID)
                 return
-	elif ((MsgLowerCase == "/additems")):
-		BotObj.sendMessage(chat_id=ChatID, text="Was moechtest du der Einkaufsliste hinzufuegen? Bitte trenne die einzelnen Elemente mit einem Komma! Wenn du fertig bist, nutze /stop")
-                EditList = True
-		return	
-	elif ((MsgLowerCase == "/deleteall")):
-                BotObj.sendMessage(chat_id=ChatID, text="Ok, Liste ist geloescht.")
-                f = open(ListFile, 'w')
-		f.write("=== Einkaufsliste ===\n")
-		f.close()
-		return
-	elif ((MsgLowerCase == "/givelist")):
-		f = open(ListFile, 'r')
-		listContent = f.read()
-                BotObj.sendMessage(chat_id=ChatID, text=listContent)
-		f.close()
+        elif (MsgLowerCase == "hi" or MsgLowerCase == "hallo" or MsgLowerCase == "hey"):
+                message = "Hallo, ich bin Mr. Slave und bin zu deinen Diensten. Nutze mich bitte." 
+                BotObj.sendMessage(chat_id=ChatID, text=message )
                 return
-	elif (( "/weather" in MsgLowerCase)):
-		town = Msg.split()
-		test=Weather(town)
-		BotObj.sendMessage(chat_id=ChatID, text=test)
-		return
-	elif ((MsgLowerCase == "/temp")):
+        elif ((MsgLowerCase == "einkaufsliste")):
+                keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                                [InlineKeyboardButton(
+                                        text='Hinzufügen',
+                                        callback_data='/additems'),
+                                InlineKeyboardButton(
+                                        text='Löschen',
+                                        callback_data='/deleteall')],
+                                [InlineKeyboardButton(
+                                        text='Liste',
+                                        callback_data='/givelist')],
+
+                ])
+                BotObj.send_message(chat_id=ChatID, text="Was möchtest du mit der Einkaufslist tun?", reply_markup=keyboard)
+                return
+        elif ((MsgLowerCase == "fun facts")):
+                RandomFact = ChuckNorrisJokes()
+                BotObj.sendMessage(chat_id=ChatID, text=RandomFact)
+                return
+        elif ((MsgLowerCase == "ccc fr")):
+                status = subprocess.check_output("curl https://cccfr.de/status/bitraumstatus.py", shell=True)
+                if ("1" in status):
+                        BotObj.sendMessage(chat_id=ChatID, text="Hackerspace in Freiburg ist offen!")
+                else:
+                        BotObj.sendMessage(chat_id=ChatID, text="Hackerspace in Freiburg ist geschlossen!")
+                return
+        elif (( "wetterbericht" in MsgLowerCase)):
+                town = Msg.split()
+                test=Weather(town)
+                BotObj.sendMessage(chat_id=ChatID, text=test)
+                return
+        elif ((MsgLowerCase == "temperatur pi")):
                 text = Temp()
                 BotObj.sendMessage(chat_id=ChatID, text=text)
                 return
-	elif ((MsgLowerCase == "/disk")):
+        elif ((MsgLowerCase == "speicher pi")):
                 text = Disk()
                 BotObj.sendMessage(chat_id=ChatID, text=text)
                 return
-	else:
-		BotObj.sendMessage(chat_id=ChatID, text="Ich verstehe den Befehl nicht. Nutze /help fuer mehr Informationen.")
-		return
+        else:
+                BotObj.sendMessage(chat_id=ChatID, text="Ich verstehe den Befehl nicht. Nutze nur die hier genutzten Befehle.")
+                return
 
 def EditTheList(Msg,Bot,ChatID):
         global EditList
 	if ((Msg == "/stop")):
-                Bot.sendMessage(chat_id=ChatID, text="Danke fuers eintragen!")
+                Bot.sendMessage(chat_id=ChatID, text="Danke fürs eintragen!")
                 EditList = False
                 return
         elif (not Msg.startswith('/')):
@@ -156,11 +207,11 @@ def Disk():
 def Weather(town):
 	w_api="http://api.openweathermap.org/data/2.5/forecast?q="
 	api_code="&appid=" + WEATHER_KEY
-	country=",de"
+	country=STANDARD_COUNTRY
 	unit="&units=metric&lang=de"
 	if len(town) > 2:
 		country=town[2]
-	town="Berlin"
+	town=STANDARD_TOWN
 	resp=requests.get(w_api+town+country+api_code+unit)
 	loadedJson=json.loads(resp.text)
 	actualWeather=loadedJson["list"][0]
